@@ -1,155 +1,71 @@
 import { Image } from 'expo-image';
 import React from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { StyleSheet, View, Pressable, ActivityIndicator } from 'react-native';
+import { Redirect } from 'expo-router';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/auth';
 
-export default function AuthChoiceScreen() {
-  const { signInWithGoogle } = useAuth();
-  const [showEmailLogin, setShowEmailLogin] = React.useState(false);
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
+export default function HomeScreen() {
+  const { user, accessToken, signOut, isLoading } = useAuth();
 
-  const handleGoogleSignIn = () => {
-    void signInWithGoogle();
-  };
+  // Show loading while checking auth
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+        <ThemedText style={styles.loadingText}>Loading...</ThemedText>
+      </View>
+    );
+  }
 
-  const handleEmailLogin = () => {
-    // TODO: call your backend /api/v1/auth/login with email & password
-    // and then handle the OTP flow or token you receive.
-    console.log('Login with email/password', { email, password });
-  };
+  // Redirect to auth if not authenticated
+  if (!user) {
+    return <Redirect href="/auth" />;
+  }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1 }}>
-      <ParallaxScrollView
-        headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-        headerImage={
-          <Image
-            source={require('@/assets/images/partial-react-logo.png')}
-            style={styles.reactLogo}
-          />
-        }>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="title">Sign in</ThemedText>
-          <ThemedText>Choose how you want to continue</ThemedText>
-        </ThemedView>
-
-        <ThemedView style={styles.section}>
-          <Pressable style={styles.primaryButton} onPress={handleGoogleSignIn}>
-            <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
-              Continue with Google
-            </ThemedText>
-          </Pressable>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <ThemedText style={styles.dividerLabel}>or</ThemedText>
-            <View style={styles.divider} />
-          </View>
-
-          {!showEmailLogin ? (
-            <Pressable
-              style={styles.secondaryButton}
-              onPress={() => setShowEmailLogin(true)}>
-              <ThemedText type="defaultSemiBold" style={styles.secondaryButtonText}>
-                Continue with email
-              </ThemedText>
-            </Pressable>
-          ) : (
-            <View style={styles.emailForm}>
-              <ThemedText type="subtitle">Sign in with email</ThemedText>
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
-              <Pressable style={styles.primaryButton} onPress={handleEmailLogin}>
-                <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
-                  Sign in
-                </ThemedText>
-              </Pressable>
-            </View>
-          )}
-        </ThemedView>
-      </ParallaxScrollView>
-    </KeyboardAvoidingView>
+    <ParallaxScrollView
+      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+      headerImage={
+        <Image
+          source={require('@/assets/images/partial-react-logo.png')}
+          style={styles.reactLogo}
+        />
+      }>
+      <ThemedView style={styles.titleContainer}>
+        <ThemedText type="title">Welcome!</ThemedText>
+        <ThemedText>You are authenticated</ThemedText>
+      </ThemedView>
+      <ThemedView style={styles.stepContainer}>
+        <ThemedText type="subtitle">User Information</ThemedText>
+        <ThemedText>Email: {user.email}</ThemedText>
+        <ThemedText>Name: {user.name || 'Not set'}</ThemedText>
+        <ThemedText>Role: {user.role}</ThemedText>
+      </ThemedView>
+      <ThemedView style={styles.stepContainer}>
+        <Pressable style={styles.signOutButton} onPress={signOut}>
+          <ThemedText type="defaultSemiBold" style={styles.signOutButtonText}>
+            Sign Out
+          </ThemedText>
+        </Pressable>
+      </ThemedView>
+    </ParallaxScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   titleContainer: {
-    gap: 4,
-    marginBottom: 24,
-  },
-  section: {
-    gap: 16,
-  },
-  primaryButton: {
-    backgroundColor: '#000',
-    paddingVertical: 14,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonText: {
-    color: '#fff',
-  },
-  secondaryButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButtonText: {
-    color: '#333',
-  },
-  dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 24,
   },
-  divider: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#ccc',
-  },
-  dividerLabel: {
-    color: '#888',
-  },
-  emailForm: {
-    gap: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  stepContainer: {
+    gap: 8,
+    marginBottom: 8,
   },
   reactLogo: {
     height: 178,
@@ -157,5 +73,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: 'absolute',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+  },
+  signOutButton: {
+    backgroundColor: '#ff3b30',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  signOutButtonText: {
+    color: '#fff',
   },
 });

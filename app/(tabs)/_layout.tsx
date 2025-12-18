@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -8,6 +8,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const pathname = usePathname();
+
+  // Hide tab bar on auth screen (though auth is now separate, this is a safeguard)
+  const shouldHideTabBar = pathname?.includes('/auth');
 
   return (
     <Tabs
@@ -15,6 +19,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarStyle: shouldHideTabBar ? { display: 'none' } : undefined,
       }}>
       <Tabs.Screen
         name="index"
