@@ -8,8 +8,8 @@ import {
   StyleSheet,
   TextInput,
   View,
+  ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
@@ -19,56 +19,36 @@ import { useAuth } from '@/context/auth';
 type AuthMode = 'choice' | 'login' | 'register' | 'otp';
 
 export default function AuthScreen() {
-  const router = useRouter();
   const {
     login,
     verifyOtp,
     register,
     verifyEmail,
-    isLoading,
     error,
     user,
     clearError,
     pendingEmail,
     isRegistrationFlow,
-    setPendingEmail,
-    setIsRegistrationFlow,
+    startOtpFlow,
+    clearOtpFlow,
   } = useAuth();
+
   const [mode, setMode] = React.useState<AuthMode>('choice');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [name, setName] = React.useState('');
   const [otpCode, setOtpCode] = React.useState('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  // Initialize mode based on pendingEmail (if we have a pending OTP flow)
-  // This restores the OTP screen if the component remounts during OTP flow
+  // Sync mode with pendingEmail state (restored from storage or set after login/register)
   React.useEffect(() => {
-    if (pendingEmail) {
-      console.log('Restoring OTP flow from context, pendingEmail:', pendingEmail);
-      if (mode !== 'otp') {
-        setMode('otp');
-      }
-    } else if (mode === 'otp') {
-      // If pendingEmail is cleared but we're still in OTP mode, go back to choice
-      console.log('Pending email cleared, returning to choice screen');
-      setMode('choice');
+    if (pendingEmail && mode !== 'otp') {
+      setMode('otp');
     }
-  }, [pendingEmail]); // Only depend on pendingEmail, not mode, to avoid loops
+  }, [pendingEmail, mode]);
 
-  // Debug: Log mode changes
-  React.useEffect(() => {
-    console.log('Auth screen mode changed to:', mode);
-    console.log('Pending email (from context):', pendingEmail);
-    console.log('Is registration flow (from context):', isRegistrationFlow);
-  }, [mode, pendingEmail, isRegistrationFlow]);
-
-  // Redirect if already authenticated (but only if not in OTP flow)
-  React.useEffect(() => {
-    if (user && mode !== 'otp') {
-      console.log('User authenticated, redirecting to tabs');
-      router.replace('/(tabs)');
-    }
-  }, [user, router, mode]);
+  // Don't manually redirect - let RootLayoutNav handle it declaratively
+  // This prevents navigation loops
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -77,30 +57,16 @@ export default function AuthScreen() {
     }
 
     try {
-      console.log('Starting login...');
-      const result = await login(email, password);
-      console.log('Login successful, result:', result);
-      
-      // Success - explicitly clear any errors and proceed to OTP
+      setIsSubmitting(true);
       clearError();
-      setOtpCode(''); // Clear OTP input
-      
-      // Set context state - the useEffect will automatically set mode to 'otp'
-      console.log('[AuthScreen] About to set pendingEmail to:', result.email);
-      setIsRegistrationFlow(false); // This is login flow
-      setPendingEmail(result.email); // This will trigger the useEffect to set mode to 'otp'
-      console.log('[AuthScreen] pendingEmail set to:', result.email);
-      
-      // Also set mode directly as a backup (in case useEffect doesn't fire immediately)
-      setMode('otp');
+      const result = await login(email, password);
+      await startOtpFlow(result.email, false);
+      setOtpCode('');
     } catch (err) {
-      // Only show error if login actually failed
-      const errorMessage = err instanceof Error ? err.message : error?.message || 'An error occurred';
-      console.error('Login error in handleLogin:', err);
-      // Don't reset mode - stay on login form
-      // Don't clear email/password - let user correct them
-      // Error is already set in context, just show alert
+      const errorMessage = err instanceof Error ? err.message : error?.message || 'Login failed';
       Alert.alert('Login Failed', errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -111,26 +77,16 @@ export default function AuthScreen() {
     }
 
     try {
-      const result = await register(email, password, name);
-      // Success - explicitly clear any errors and proceed to OTP
+      setIsSubmitting(true);
       clearError();
-      setOtpCode(''); // Clear OTP input
-      
-      // Set context state - the useEffect will automatically set mode to 'otp'
-      console.log('[AuthScreen] About to set pendingEmail to:', result.email);
-      setIsRegistrationFlow(true); // This is registration flow
-      setPendingEmail(result.email); // This will trigger the useEffect to set mode to 'otp'
-      console.log('[AuthScreen] pendingEmail set to:', result.email);
-      
-      // Also set mode directly as a backup (in case useEffect doesn't fire immediately)
-      setMode('otp');
+      const result = await register(email, password, name);
+      await startOtpFlow(result.email, true);
+      setOtpCode('');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : error?.message || 'An error occurred';
-      console.error('Registration error:', err);
-      // Don't reset mode - stay on register form
-      // Don't clear form fields - let user correct them
-      // Error is already set in context, just show alert
+      const errorMessage = err instanceof Error ? err.message : error?.message || 'Registration failed';
       Alert.alert('Registration Failed', errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -142,14 +98,16 @@ export default function AuthScreen() {
 
     if (!pendingEmail) {
       Alert.alert('Error', 'No email found. Please start over.');
+      await clearOtpFlow();
+      setMode('choice');
       return;
     }
 
     try {
+      setIsSubmitting(true);
+      clearError();
       if (isRegistrationFlow) {
-        // Registration flow: use verify-email endpoint
         await verifyEmail(pendingEmail, otpCode);
-        // Registration complete - user needs to login
         Alert.alert(
           'Registration Complete',
           'Your account has been created successfully! Please login with your email and password.',
@@ -157,28 +115,48 @@ export default function AuthScreen() {
             {
               text: 'OK',
               onPress: () => {
-                // Reset to login form
                 setMode('login');
                 setOtpCode('');
-                setPendingEmail(null);
-                setIsRegistrationFlow(false);
-                clearError();
+                setEmail(pendingEmail || '');
+                setPassword('');
+                setName('');
               },
             },
           ]
         );
       } else {
-        // Login flow: use verify-otp endpoint
         await verifyOtp(pendingEmail, otpCode);
-        // Success - user is now logged in, redirect to tabs
-        clearError();
-        router.replace('/(tabs)');
+        // User is now authenticated - RootLayoutNav will handle redirect
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : error?.message || 'Invalid OTP code';
-      console.error('OTP verification error:', err);
       Alert.alert('Verification Failed', errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const handleBackToForm = () => {
+    setMode(isRegistrationFlow ? 'register' : 'login');
+    setOtpCode('');
+    clearError();
+  };
+
+  const handleBackToChoice = () => {
+    setEmail('');
+    setPassword('');
+    setName('');
+    setMode('choice');
+    clearError();
+  };
+
+  const handleSwitchMode = () => {
+    if (mode === 'login') {
+      setMode('register');
+    } else {
+      setMode('login');
+    }
+    clearError();
   };
 
   return (
@@ -195,14 +173,22 @@ export default function AuthScreen() {
         }>
         <ThemedView style={styles.titleContainer}>
           <ThemedText type="title">
-            {mode === 'otp' ? 'Verify Code' : mode === 'register' ? 'Sign up' : 'Sign in'}
+            {mode === 'otp'
+              ? 'Verify Code'
+              : mode === 'register'
+                ? 'Sign up'
+                : mode === 'login'
+                  ? 'Sign in'
+                  : 'Welcome'}
           </ThemedText>
           <ThemedText>
             {mode === 'otp'
               ? `Enter the code sent to ${pendingEmail}`
               : mode === 'register'
                 ? 'Create a new account'
-                : 'Sign in with your email'}
+                : mode === 'login'
+                  ? 'Sign in with your email'
+                  : 'Choose an option to continue'}
           </ThemedText>
         </ThemedView>
 
@@ -212,7 +198,7 @@ export default function AuthScreen() {
               <Pressable
                 style={styles.primaryButton}
                 onPress={() => setMode('login')}
-                disabled={isLoading}>
+                disabled={isSubmitting}>
                 <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
                   Sign in
                 </ThemedText>
@@ -225,19 +211,24 @@ export default function AuthScreen() {
               <Pressable
                 style={styles.secondaryButton}
                 onPress={() => setMode('register')}
-                disabled={isLoading}>
+                disabled={isSubmitting}>
                 <ThemedText type="defaultSemiBold" style={styles.secondaryButtonText}>
                   Create account
                 </ThemedText>
               </Pressable>
             </>
-          ) : mode === 'otp' && pendingEmail ? (
+          ) : mode === 'otp' ? (
             <View style={styles.emailForm}>
               <ThemedText style={styles.hintText}>
                 {isRegistrationFlow
                   ? 'Enter the verification code sent to your email to complete registration.'
                   : 'Enter the login code sent to your email.'}
               </ThemedText>
+              {error && error.type === 'otp' && (
+                <ThemedView style={styles.errorContainer}>
+                  <ThemedText style={styles.errorText}>{error.message}</ThemedText>
+                </ThemedView>
+              )}
               <TextInput
                 style={styles.input}
                 placeholder="Enter OTP code"
@@ -246,40 +237,32 @@ export default function AuthScreen() {
                 onChangeText={setOtpCode}
                 maxLength={6}
                 autoFocus
+                editable={!isSubmitting}
               />
               <Pressable
-                style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
+                style={[styles.primaryButton, (isSubmitting || !otpCode) && styles.buttonDisabled]}
                 onPress={handleVerifyOtp}
-                disabled={isLoading || !otpCode}>
-                <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
-                  {isLoading ? 'Verifying...' : 'Verify'}
-                </ThemedText>
+                disabled={isSubmitting || !otpCode}>
+                {isSubmitting ? (
+                  <View style={styles.buttonContent}>
+                    <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                    <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
+                      Verifying...
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
+                    Verify
+                  </ThemedText>
+                )}
               </Pressable>
-              <Pressable
-                style={styles.linkButton}
-                onPress={() => {
-                  // Go back to the form (login or register) that initiated the OTP
-                  setMode(isRegistrationFlow ? 'register' : 'login');
-                  setOtpCode('');
-                  // Keep pendingEmail in case user wants to retry
-                  clearError();
-                }}>
+              <Pressable style={styles.linkButton} onPress={handleBackToForm} disabled={isSubmitting}>
                 <ThemedText style={styles.linkText}>Back</ThemedText>
               </Pressable>
-              {isRegistrationFlow && (
-                <ThemedText style={styles.hintText}>
-                  Check your email for the verification code to complete registration.
-                </ThemedText>
-              )}
-              {!isRegistrationFlow && (
-                <ThemedText style={styles.hintText}>
-                  Check your email for the login code.
-                </ThemedText>
-              )}
             </View>
           ) : (
             <View style={styles.emailForm}>
-              {error && error.type === (mode === 'login' ? 'login' : 'register') && (
+              {error && error.type === mode && (
                 <ThemedView style={styles.errorContainer}>
                   <ThemedText style={styles.errorText}>{error.message}</ThemedText>
                 </ThemedView>
@@ -291,6 +274,7 @@ export default function AuthScreen() {
                   autoCapitalize="words"
                   value={name}
                   onChangeText={setName}
+                  editable={!isSubmitting}
                 />
               )}
               <TextInput
@@ -300,6 +284,7 @@ export default function AuthScreen() {
                 keyboardType="email-address"
                 value={email}
                 onChangeText={setEmail}
+                editable={!isSubmitting}
               />
               <TextInput
                 style={styles.input}
@@ -307,42 +292,37 @@ export default function AuthScreen() {
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
+                editable={!isSubmitting}
               />
               <Pressable
-                style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
+                style={[
+                  styles.primaryButton,
+                  (isSubmitting || !email || !password || (mode === 'register' && !name)) &&
+                    styles.buttonDisabled,
+                ]}
                 onPress={mode === 'login' ? handleLogin : handleRegister}
-                disabled={isLoading || !email || !password || (mode === 'register' && !name)}>
-                <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
-                  {isLoading
-                    ? 'Loading...'
-                    : mode === 'login'
-                      ? 'Sign in'
-                      : 'Create account'}
-                </ThemedText>
+                disabled={isSubmitting || !email || !password || (mode === 'register' && !name)}>
+                {isSubmitting ? (
+                  <View style={styles.buttonContent}>
+                    <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                    <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
+                      {mode === 'login' ? 'Signing in...' : 'Creating account...'}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
+                    {mode === 'login' ? 'Sign in' : 'Create account'}
+                  </ThemedText>
+                )}
               </Pressable>
-              <Pressable
-                style={styles.linkButton}
-                onPress={() => {
-                  // Switch between login and register without going back to choice
-                  if (mode === 'login') {
-                    setMode('register');
-                  } else {
-                    setMode('login');
-                  }
-                  // Keep form fields so user doesn't lose their input
-                }}>
+              <Pressable style={styles.linkButton} onPress={handleSwitchMode} disabled={isSubmitting}>
                 <ThemedText style={styles.linkText}>
-                  {mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+                  {mode === 'login'
+                    ? "Don't have an account? Sign up"
+                    : 'Already have an account? Sign in'}
                 </ThemedText>
               </Pressable>
-              <Pressable
-                style={styles.linkButton}
-                onPress={() => {
-                  setEmail('');
-                  setPassword('');
-                  setName('');
-                  setMode('choice');
-                }}>
+              <Pressable style={styles.linkButton} onPress={handleBackToChoice} disabled={isSubmitting}>
                 <ThemedText style={styles.linkText}>Back to options</ThemedText>
               </Pressable>
             </View>
@@ -367,9 +347,15 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   primaryButtonText: {
     color: '#fff',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   secondaryButton: {
     borderRadius: 999,
@@ -407,7 +393,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
   linkButton: {
     paddingVertical: 8,
@@ -442,4 +428,3 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
-

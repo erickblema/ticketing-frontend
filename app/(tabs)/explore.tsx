@@ -1,112 +1,261 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  View,
+} from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { useEvents } from '@/hooks/use-events';
+import { Event } from '@/types/events';
 
-export default function TabTwoScreen() {
+export default function EventsScreen() {
+  const router = useRouter();
+  const { data: events, isLoading, error, refetch, isRefetching } = useEvents('active');
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const renderEvent = ({ item }: { item: Event }) => (
+    <Pressable
+      style={styles.eventCard}
+      onPress={() => router.push(`/event/${item.event_id}`)}>
+      {item.image_url ? (
+        <Image source={{ uri: item.image_url }} style={styles.eventImage} contentFit="cover" />
+      ) : (
+        <View style={[styles.eventImage, styles.placeholderImage]}>
+          <ThemedText style={styles.placeholderText}>No Image</ThemedText>
+        </View>
+      )}
+      <View style={styles.eventContent}>
+        <ThemedText type="defaultSemiBold" style={styles.eventTitle} numberOfLines={2}>
+          {item.title}
+        </ThemedText>
+        <ThemedText style={styles.eventVenue} numberOfLines={1}>
+          📍 {item.venue}
+        </ThemedText>
+        <ThemedText style={styles.eventDate} numberOfLines={1}>
+          🗓️ {formatDate(item.event_date)}
+        </ThemedText>
+        <View style={styles.priceRow}>
+          <ThemedText style={styles.priceLabel}>From:</ThemedText>
+          <ThemedText type="defaultSemiBold" style={styles.price}>
+            ${Math.min(...item.ticket_types.map((tt) => tt.price)).toFixed(2)}
+          </ThemedText>
+        </View>
+        <View style={styles.ticketTypesRow}>
+          {item.ticket_types.slice(0, 3).map((tt, idx) => (
+            <View key={idx} style={styles.ticketTypeBadge}>
+              <ThemedText style={styles.ticketTypeText}>
+                {tt.name} ({tt.available} left)
+              </ThemedText>
+            </View>
+          ))}
+          {item.ticket_types.length > 3 && (
+            <ThemedText style={styles.moreTypes}>+{item.ticket_types.length - 3} more</ThemedText>
+          )}
+        </View>
+      </View>
+    </Pressable>
+  );
+
+  if (isLoading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" />
+        <ThemedText style={styles.loadingText}>Loading events...</ThemedText>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centerContainer}>
+        <ThemedText style={styles.errorText}>Failed to load events</ThemedText>
+        <Pressable style={styles.retryButton} onPress={() => refetch()}>
+          <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (!events || events.length === 0) {
+    return (
+      <View style={styles.centerContainer}>
+        <ThemedText style={styles.emptyText}>No events available</ThemedText>
+        <ThemedText style={styles.emptySubtext}>Check back later for new events!</ThemedText>
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
+    <ThemedView style={styles.container}>
+      <ThemedView style={styles.header}>
+        <ThemedText type="title">Events</ThemedText>
+        <ThemedText style={styles.subtitle}>Discover upcoming events</ThemedText>
       </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+      <FlatList
+        data={events}
+        renderItem={renderEvent}
+        keyExtractor={(item) => item.event_id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#007AFF" />
+        }
+        showsVerticalScrollIndicator={false}
+      />
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
   },
-  titleContainer: {
-    flexDirection: 'row',
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    gap: 16,
+  },
+  header: {
+    padding: 20,
+    paddingBottom: 12,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  listContent: {
+    padding: 16,
+    paddingTop: 0,
+  },
+  eventCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  eventImage: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f0f0f0',
+  },
+  placeholderImage: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e0e0e0',
+  },
+  placeholderText: {
+    color: '#999',
+    fontSize: 14,
+  },
+  eventContent: {
+    padding: 16,
     gap: 8,
+  },
+  eventTitle: {
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  eventVenue: {
+    fontSize: 14,
+    color: '#666',
+  },
+  eventDate: {
+    fontSize: 14,
+    color: '#666',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  price: {
+    fontSize: 18,
+    color: '#007AFF',
+  },
+  ticketTypesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  ticketTypeBadge: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  ticketTypeText: {
+    fontSize: 12,
+    color: '#333',
+  },
+  moreTypes: {
+    fontSize: 12,
+    color: '#666',
+    alignSelf: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#f44336',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });

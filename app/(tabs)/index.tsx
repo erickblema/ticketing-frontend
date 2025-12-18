@@ -7,12 +7,30 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/auth';
+import { useProfile } from '@/hooks/use-profile';
 
 export default function HomeScreen() {
-  const { user, accessToken, signOut, isLoading } = useAuth();
+  const { user, signOut, accessToken } = useAuth();
+  const { data: profile, isLoading: isLoadingProfile, error: profileError } = useProfile();
 
-  // Show loading while checking auth
-  if (isLoading) {
+  console.log('[Dashboard] 🔄 Component render', {
+    hasUser: !!user,
+    hasAccessToken: !!accessToken,
+    hasProfile: !!profile,
+    isLoading: isLoadingProfile,
+    hasError: !!profileError,
+    userId: user?.user_id,
+    email: user?.email,
+  });
+
+  // Redirect to auth if not authenticated
+  if (!user) {
+    console.log('[Dashboard] 🚫 No user found, redirecting to auth...');
+    return <Redirect href="/auth" />;
+  }
+
+  if (!accessToken) {
+    console.log('[Dashboard] ⚠️ No access token found, waiting...');
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" />
@@ -21,10 +39,24 @@ export default function HomeScreen() {
     );
   }
 
-  // Redirect to auth if not authenticated
-  if (!user) {
-    return <Redirect href="/auth" />;
-  }
+  console.log('[Dashboard] ✅ User authenticated, rendering dashboard', {
+    userId: user.user_id,
+    email: user.email,
+  });
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return 'N/A';
+    }
+  };
 
   return (
     <ParallaxScrollView
@@ -36,16 +68,57 @@ export default function HomeScreen() {
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <ThemedText>You are authenticated</ThemedText>
+        <ThemedText type="title">Dashboard</ThemedText>
+        <ThemedText>Welcome back, {user.name || user.email}!</ThemedText>
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">User Information</ThemedText>
-        <ThemedText>Email: {user.email}</ThemedText>
-        <ThemedText>Name: {user.name || 'Not set'}</ThemedText>
-        <ThemedText>Role: {user.role}</ThemedText>
+
+      <ThemedView style={styles.profileContainer}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Profile Information
+        </ThemedText>
+
+        {isLoadingProfile ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" />
+            <ThemedText style={styles.loadingText}>Loading profile...</ThemedText>
+          </View>
+        ) : profileError ? (
+          <View style={styles.errorContainer}>
+            <ThemedText style={styles.errorText}>
+              Failed to load profile: {profileError instanceof Error ? profileError.message : 'Unknown error'}
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={styles.profileInfo}>
+            <View style={styles.profileRow}>
+              <ThemedText style={styles.label}>Email:</ThemedText>
+              <ThemedText style={styles.value}>{profile?.email || user.email}</ThemedText>
+            </View>
+            <View style={styles.profileRow}>
+              <ThemedText style={styles.label}>Name:</ThemedText>
+              <ThemedText style={styles.value}>{profile?.name || user.name || 'Not set'}</ThemedText>
+            </View>
+            <View style={styles.profileRow}>
+              <ThemedText style={styles.label}>Role:</ThemedText>
+              <ThemedText style={[styles.value, styles.roleBadge]}>
+                {profile?.role || user.role}
+              </ThemedText>
+            </View>
+            {profile?.created_at && (
+              <View style={styles.profileRow}>
+                <ThemedText style={styles.label}>Member since:</ThemedText>
+                <ThemedText style={styles.value}>{formatDate(profile.created_at)}</ThemedText>
+              </View>
+            )}
+            <View style={styles.profileRow}>
+              <ThemedText style={styles.label}>User ID:</ThemedText>
+              <ThemedText style={[styles.value, styles.userId]}>{user.user_id}</ThemedText>
+            </View>
+          </View>
+        )}
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
+
+      <ThemedView style={styles.actionsContainer}>
         <Pressable style={styles.signOutButton} onPress={signOut}>
           <ThemedText type="defaultSemiBold" style={styles.signOutButtonText}>
             Sign Out
@@ -58,14 +131,48 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    gap: 4,
     marginBottom: 24,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  profileContainer: {
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  sectionTitle: {
+    marginBottom: 16,
+  },
+  profileInfo: {
+    gap: 12,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  value: {
+    fontSize: 14,
+    flex: 2,
+    textAlign: 'right',
+  },
+  roleBadge: {
+    textTransform: 'capitalize',
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  userId: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: '#666',
   },
   reactLogo: {
     height: 178,
@@ -75,23 +182,36 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    padding: 20,
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: 14,
+    color: '#666',
+  },
+  actionsContainer: {
+    marginTop: 8,
   },
   signOutButton: {
     backgroundColor: '#ff3b30',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 16,
   },
   signOutButtonText: {
     color: '#fff',
+  },
+  errorContainer: {
+    padding: 16,
+    backgroundColor: '#ffebee',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#f44336',
+  },
+  errorText: {
+    color: '#c62828',
+    fontSize: 14,
   },
 });
