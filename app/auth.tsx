@@ -83,14 +83,12 @@ export default function AuthScreen() {
       
       // Success - explicitly clear any errors and proceed to OTP
       clearError();
-      setPendingEmail(result.email);
-      setIsRegistrationFlow(false); // This is login flow
       setOtpCode(''); // Clear OTP input
       
-      // Set mode to OTP last, after all other state is set
-      console.log('Setting mode to OTP');
-      setMode('otp');
-      console.log('Mode set to OTP, pendingEmail:', result.email);
+      // Set context state - the useEffect will automatically set mode to 'otp'
+      setIsRegistrationFlow(false); // This is login flow
+      setPendingEmail(result.email); // This will trigger the useEffect to set mode to 'otp'
+      console.log('Login successful, pendingEmail set to:', result.email);
     } catch (err) {
       // Only show error if login actually failed
       const errorMessage = err instanceof Error ? err.message : error?.message || 'An error occurred';
@@ -112,10 +110,12 @@ export default function AuthScreen() {
       const result = await register(email, password, name);
       // Success - explicitly clear any errors and proceed to OTP
       clearError();
-      setPendingEmail(result.email);
+      setOtpCode(''); // Clear OTP input
+      
+      // Set context state - the useEffect will automatically set mode to 'otp'
       setIsRegistrationFlow(true); // This is registration flow
-      setMode('otp');
-      setOtpCode('');
+      setPendingEmail(result.email); // This will trigger the useEffect to set mode to 'otp'
+      console.log('Registration successful, pendingEmail set to:', result.email);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : error?.message || 'An error occurred';
       console.error('Registration error:', err);
@@ -330,10 +330,10 @@ export default function AuthScreen() {
               <Pressable
                 style={styles.linkButton}
                 onPress={() => {
-                  setMode('choice');
                   setEmail('');
                   setPassword('');
                   setName('');
+                  setMode('choice');
                 }}>
                 <ThemedText style={styles.linkText}>Back to options</ThemedText>
               </Pressable>
