@@ -1,5 +1,6 @@
 // Auth context for email/password authentication
 import * as React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Adjust this to your backend URL (or use EXPO_PUBLIC_API_URL env)
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -47,6 +48,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // OTP flow state - persists across component remounts
   const [pendingEmail, setPendingEmail] = React.useState<string | null>(null);
   const [isRegistrationFlow, setIsRegistrationFlow] = React.useState(false);
+
+  // Debug: Log AuthProvider mount/remount
+  React.useEffect(() => {
+    console.log('[AuthContext] AuthProvider mounted/remounted');
+    return () => {
+      console.log('[AuthContext] AuthProvider unmounting - THIS SHOULD NOT HAPPEN!');
+    };
+  }, []);
+
+  // Debug: Log pendingEmail changes
+  React.useEffect(() => {
+    console.log('[AuthContext] pendingEmail changed to:', pendingEmail);
+  }, [pendingEmail]);
 
   // Check for existing session on mount
   React.useEffect(() => {
@@ -228,6 +242,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
     setAccessToken(null);
     setError(null);
+    setPendingEmail(null);
+    setIsRegistrationFlow(false);
   };
 
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
@@ -252,23 +268,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return res;
   };
 
-  const value: AuthContextType = {
-    user,
-    accessToken,
-    isLoading,
-    error,
-    pendingEmail,
-    isRegistrationFlow,
-    setPendingEmail,
-    setIsRegistrationFlow,
-    clearError,
-    login,
-    verifyOtp,
-    register,
-    verifyEmail,
-    signOut,
-    fetchWithAuth,
-  };
+  // Memoize the value object to prevent unnecessary re-renders
+  // Functions are stable (don't change between renders), so we only depend on state values
+  const value: AuthContextType = React.useMemo(
+    () => ({
+      user,
+      accessToken,
+      isLoading,
+      error,
+      pendingEmail,
+      isRegistrationFlow,
+      setPendingEmail,
+      setIsRegistrationFlow,
+      clearError,
+      login,
+      verifyOtp,
+      register,
+      verifyEmail,
+      signOut,
+      fetchWithAuth,
+    }),
+    [user, accessToken, isLoading, error, pendingEmail, isRegistrationFlow]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

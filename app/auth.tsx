@@ -86,9 +86,13 @@ export default function AuthScreen() {
       setOtpCode(''); // Clear OTP input
       
       // Set context state - the useEffect will automatically set mode to 'otp'
+      console.log('[AuthScreen] About to set pendingEmail to:', result.email);
       setIsRegistrationFlow(false); // This is login flow
       setPendingEmail(result.email); // This will trigger the useEffect to set mode to 'otp'
-      console.log('Login successful, pendingEmail set to:', result.email);
+      console.log('[AuthScreen] pendingEmail set to:', result.email);
+      
+      // Also set mode directly as a backup (in case useEffect doesn't fire immediately)
+      setMode('otp');
     } catch (err) {
       // Only show error if login actually failed
       const errorMessage = err instanceof Error ? err.message : error?.message || 'An error occurred';
@@ -113,9 +117,13 @@ export default function AuthScreen() {
       setOtpCode(''); // Clear OTP input
       
       // Set context state - the useEffect will automatically set mode to 'otp'
+      console.log('[AuthScreen] About to set pendingEmail to:', result.email);
       setIsRegistrationFlow(true); // This is registration flow
       setPendingEmail(result.email); // This will trigger the useEffect to set mode to 'otp'
-      console.log('Registration successful, pendingEmail set to:', result.email);
+      console.log('[AuthScreen] pendingEmail set to:', result.email);
+      
+      // Also set mode directly as a backup (in case useEffect doesn't fire immediately)
+      setMode('otp');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : error?.message || 'An error occurred';
       console.error('Registration error:', err);
@@ -152,7 +160,7 @@ export default function AuthScreen() {
                 // Reset to login form
                 setMode('login');
                 setOtpCode('');
-                setPendingEmail('');
+                setPendingEmail(null);
                 setIsRegistrationFlow(false);
                 clearError();
               },
